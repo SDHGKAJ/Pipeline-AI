@@ -211,6 +211,25 @@ def get_settings() -> Settings:
     return Settings()
 
 
+# Global CONFIG instance for direct import
+CONFIG = get_settings()
+
+
+# Data Source and Storage Configs for backward compatibility
+class DataSourceConfig(BaseSettings):
+    """Data source configuration"""
+    class Config:
+        env_prefix = "DATASOURCE_"
+        case_sensitive = False
+
+
+class StorageConfig(BaseSettings):
+    """Storage configuration"""
+    class Config:
+        env_prefix = "STORAGE_"
+        case_sensitive = False
+
+
 def get_database_url(settings: Optional[Settings] = None) -> str:
     """Get database URL, preferring RDS over SQLAlchemy URL"""
     settings = settings or get_settings()

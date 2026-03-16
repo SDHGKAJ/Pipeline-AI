@@ -4,127 +4,126 @@
 # ================================
 # Core Data Processing & Analysis
 # ================================
-pandas==2.1.0
-numpy==1.24.0
-scipy==1.11.0
-polars==0.19.0  # Fast alternative to pandas
-scikit-learn==1.3.0
+pandas
+numpy
+scipy
+polars  # Fast alternative to pandas
+scikit-learn
 
 # ================================
 # ML & Deep Learning Frameworks
 # ================================
-xgboost==2.0.0
-lightgbm==4.0.0
-optuna==3.13.0
-shap==0.42.3
-imbalanced-learn==0.11.0  # SMOTE for class imbalance
+xgboost
+lightgbm
+optuna
+shap
+imbalanced-learn  # SMOTE for class imbalance
 
 # ================================
 # MLOps & Experiment Tracking
 # ================================
-mlflow==2.7.0
-wandb==0.15.8
-pydantic==2.3.0
-pydantic-settings==2.0.3
+mlflow
+wandb
+pydantic
+pydantic-settings
 
 # ================================
 # API & Web Framework
 # ================================
-fastapi==0.103.0
-uvicorn==0.23.1
-python-multipart==0.0.6
-httpx==0.24.1
+fastapi
+uvicorn
+python-multipart
+httpx
 
 # ================================
 # Databases & Data Sources
 # ================================
-psycopg2-binary==2.9.7
-mysql-connector-python==8.0.34
-sqlalchemy==2.0.21
-alembic==1.12.0
+psycopg2-binary
+mysql-connector-python
+sqlalchemy
+alembic
 
 # ================================
 # Streaming & Message Brokers
 # ================================
-kafka-python==2.0.2
-confluent-kafka==2.2.0
-redis==5.0.0
+kafka-python
+confluent-kafka
+redis
 
 # ================================
 # Feature Store & Caching
 # ================================
-feast==0.30.0
-redis==5.0.0
+feast
 
 # ================================
 # Cloud & AWS Integration
 # ================================
-boto3==1.28.30
-botocore==1.31.0
-s3fs==2023.9.0
-awswrangler==3.2.0
+boto3
+botocore
+s3fs
+awswrangler
 
 # ================================
 # Data Quality & Validation
 # ================================
-great-expectations==0.17.12
-pandera==0.17.0
-jsonschema==4.19.0
+great-expectations
+pandera
+jsonschema
 
 # ================================
 # Monitoring, Logging & Alerting
 # ================================
-prometheus-client==0.17.1
-python-json-logger==2.0.7
-structlog==23.1.0
-watchtower==3.0.1  # CloudWatch integration
+prometheus-client
+python-json-logger
+structlog
+watchtower  # CloudWatch integration
 
 # ================================
 # Data Drift Detection
 # ================================
-scikit-multiflow==0.5.3
-alibi-detect==0.11.0
+river  # Replaces scikit-multiflow (abandoned, no Py3.11 support)
+alibi-detect  # 0.11.0 numba dep requires Py<3.11
 
 # ================================
 # Utilities & Configuration
 # ================================
-pyyaml==6.0.1
-python-dotenv==1.0.0
-requests==2.31.0
-click==8.1.7
-tqdm==4.66.0
+pyyaml
+python-dotenv
+requests
+click
+tqdm
 
 # ================================
 # Testing & Mocking
 # ================================
-pytest==7.4.0
-pytest-cov==4.1.0
-pytest-asyncio==0.21.1
-pytest-mock==3.11.1
-moto==4.2.0  # AWS Mocking
-responses==0.23.0  # HTTP mocking
+pytest
+pytest-cov
+pytest-asyncio
+pytest-mock
+moto  # AWS Mocking
+responses  # HTTP mocking
 
 # ================================
 # Code Quality & Linting
 # ================================
-black==23.9.1
-flake8==6.1.0
-isort==5.12.0
-mypy==1.5.1
-pylint==2.17.0
+black
+flake8
+isort
+mypy
+pylint
 
 # ================================
 # Development & Jupyter
 # ================================
-ipython==8.15.0
-jupyter==1.0.0
-notebook==7.0.2
-jupyterlab==4.0.0
-nbconvert==7.8.0
+ipython
+jupyter
+notebook
+jupyterlab
+nbconvert
 
 # ================================
 # Visualization (Optional)
 # ================================
-matplotlib==3.8.0
-seaborn==0.12.0
-plotly==5.16.0
+matplotlib
+seaborn
+plotly

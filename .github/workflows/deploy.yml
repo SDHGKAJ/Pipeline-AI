@@ -1,0 +1,266 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'config/**'
+      - 'deployment/**'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    
+    - name: Build Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: churn-prediction-api
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+          --target production \
+          -f deployment/Dockerfile .
+    
+    - name: Run Trivy security scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ steps.login-ecr.outputs.registry }}/churn-prediction-api:${{ github.sha }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+    
+    - name: Upload Trivy results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
+    - name: Push Docker image to ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: churn-prediction-api
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "Image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Update ECS task definition (Staging)
+      run: |
+        aws ecs update-service \
+          --cluster churn-staging \
+          --service churn-api-staging \
+          --force-new-deployment
+    
+    - name: Wait for deployment
+      run: |
+        aws ecs wait services-stable \
+          --cluster churn-staging \
+          --services churn-api-staging
+    
+    - name: Run smoke tests
+      run: |
+        echo "Running smoke tests against staging..."
+        curl -f http://churn-api-staging.internal:8000/health || exit 1
+        echo "Smoke tests passed"
+    
+    - name: Notify deployment status
+      uses: slackapi/slack-github-action@v1
+      if: always()
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+        payload: |
+          {
+            "text": "Deployment to Staging",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Deployment Status: ${{ job.status }}\nEnvironment: Staging\nCommit: ${{ github.sha }}"
+                }
+              }
+            ]
+          }
+
+  approval:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: Production
+    
+    steps:
+    - name: Manual approval for production
+      run: echo "Production deployment approved"
+
+  deploy-production:
+    needs: approval
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Deploy Blue-Green (Production)
+      run: |
+        # Get current task definition
+        TASK_DEF=$(aws ecs describe-task-definition \
+          --task-definition churn-api-prod --query taskDefinition)
+        
+        # Update service with new image (Green)
+        aws ecs update-service \
+          --cluster churn-prod \
+          --service churn-api-prod \
+          --task-definition churn-api-prod:$(echo $TASK_DEF | jq -r '.revision') \
+          --force-new-deployment
+    
+    - name: Monitor health (5 min)
+      run: |
+        echo "Monitoring deployment health for 5 minutes..."
+        for i in {1..30}; do
+          sleep 10
+          STATUS=$(curl -s http://churn-api.internal:8000/health | jq -r '.status' || echo "unhealthy")
+          echo "Check $i: $STATUS"
+          if [ "$STATUS" != "healthy" ]; then
+            echo "Rollback triggered - unhealthy status detected"
+            exit 1
+          fi
+        done
+    
+    - name: Verify model predictions
+      run: |
+        python -c "
+        import requests
+        import json
+        
+        payload = {
+            'customer_id': 'TEST_PROD_001',
+            'features': {
+                'purchase_count_30d': 5,
+                'total_spend_30d': 250.50,
+                'days_since_last_purchase': 15,
+                'rfm_score': 75.5,
+                'support_ticket_count_90d': 1,
+                'product_category_diversity': 3
+            }
+        }
+        
+        response = requests.post(
+            'http://churn-api.internal:8000/predict',
+            json=payload
+        )
+        
+        if response.status_code != 200:
+            print('Prediction verification failed')
+            exit(1)
+        
+        result = response.json()
+        print(f'Prediction: {result[\"churn_probability\"]}')
+        print('Verification passed')
+        "
+    
+    - name: Create deployment record
+      run: |
+        aws ssm put-parameter \
+          --name /churn-prediction/last-deployment \
+          --value "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+          --overwrite \
+          --type String
+    
+    - name: Notify production deployment
+      uses: slackapi/slack-github-action@v1
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+        payload: |
+          {
+            "text": "Production Deployment Successful ✅",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*Churn Prediction API* deployed to production\nCommit: <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\nAuthor: ${{ github.actor }}"
+                }
+              }
+            ]
+          }
+
+  rollback:
+    needs: deploy-production
+    if: failure()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Rollback to previous version
+      run: |
+        # Roll back service to previous task definition
+        aws ecs update-service \
+          --cluster churn-prod \
+          --service churn-api-prod \
+          --task-definition churn-api-prod:PREVIOUS \
+          --force-new-deployment
+    
+    - name: Alert team
+      uses: slackapi/slack-github-action@v1
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+        payload: |
+          {
+            "text": "❌ Production Deployment Failed - Rollback Initiated",
+            "blocks": [
+              {
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "Deployment failed and has been rolled back.\nCommit: ${{ github.sha }}\nPlease investigate: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
+              }
+            ]
+          }

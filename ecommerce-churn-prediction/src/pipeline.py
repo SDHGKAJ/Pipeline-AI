@@ -8,10 +8,10 @@ from datetime import datetime
 from typing import Tuple
 
 import pandas as pd
-from src.ingestion.data_sources import DataIngestionPipeline
-from src.features.feature_engineering import FeatureEngineer, FeatureStore
-from src.models.model_trainer import ModelTrainer, ModelRegistry
-from src.monitoring.drift_detector import (
+from ingestion.data_sources import DataIngestionPipeline
+from features.feature_engineering import FeatureEngineer, FeatureStore
+from models.model_trainer import ModelTrainer, ModelRegistry
+from monitoring.drift_detector import (
     DataDriftDetector, ModelMonitor, RetrainingTrigger, AlertManager
 )
 from config.config import CONFIG
